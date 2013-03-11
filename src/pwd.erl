@@ -8,10 +8,17 @@
 -export ([getpwnam/1]).
 -export ([getpwall/0]).
 
+-export ([getgrgid/1]).
+-export ([getgrnam/1]).
+-export ([getgrall/0]).
+
 -export ([get_by_uid/1]).
 -export ([get_by_name/1]).
-
 -export ([get_all/0]).
+
+-export ([get_group_by_uid/1]).
+-export ([get_group_by_name/1]).
+-export ([get_group_all/0]).
 
 %% gen_server callbacks
 -export ([
@@ -29,6 +36,9 @@
 -define ('CMD_GET_PWUID', 1).
 -define ('CMD_GET_PWNAM', 2).
 -define ('CMD_GET_PWALL', 3).
+-define ('CMD_GET_GRGID', 4).
+-define ('CMD_GET_GRNAM', 5).
+-define ('CMD_GET_GRALL', 6).
 
 -record (state, {port}).
 
@@ -42,6 +52,15 @@ getpwnam (Name) when is_list (Name) ->
 getpwall () -> 
   gen_server:call (pwd, {getpwall}).
 
+getgrgid (GID) when is_integer (GID) ->
+  gen_server:call (pwd, {getgrgid, GID}).
+
+getgrnam (Name) when is_list (Name) ->
+  gen_server:call (pwd, {getgrnam, Name}).
+
+getgrall () ->
+  gen_server:call (pwd, {getgrall}).
+
 get_by_uid (UID) when is_integer (UID) ->
   getpwuid (UID).
 
@@ -50,6 +69,15 @@ get_by_name (Name) when is_list (Name) ->
 
 get_all () ->
   getpwall ().
+
+get_group_by_uid (GID) when is_integer (GID) ->
+  getgrgid (GID).
+
+get_group_by_name (Name) when is_list (Name) ->
+  getgrnam (Name).
+
+get_group_all () ->
+  getgrall ().
 
 %% --------------------------------------------------------------------
 %% @spec start_link () -> {ok, Pid} | ignore | {error, Error}
@@ -143,6 +171,15 @@ handle_call ({getpwnam, Name}, _From, #state {port = Port} = State) ->
   {reply, Reply, State};
 handle_call ({getpwall}, _From, #state {port = Port} = State) ->
   Reply = pwd:control_drv (Port, ?CMD_GET_PWALL),
+  {reply, Reply, State};
+handle_call ({getgrgid, GID}, _From, #state {port = Port} = State) ->
+  Reply = pwd:control_drv (Port, ?CMD_GET_GRGID, erlang:list_to_binary (erlang:integer_to_list (GID))),
+  {reply, Reply, State};
+handle_call ({getgrnam, Name}, _From, #state {port = Port} = State) ->
+  Reply = pwd:control_drv (Port, ?CMD_GET_GRNAM, erlang:list_to_binary (Name)),
+  {reply, Reply, State};
+handle_call ({getgrall}, _From, #state {port = Port} = State) ->
+  Reply = pwd:control_drv (Port, ?CMD_GET_GRALL),
   {reply, Reply, State};
 handle_call (Request, _From, State) ->
   {reply, {unknown, Request}, State}.

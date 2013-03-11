@@ -1,3 +1,4 @@
+#include <grp.h>
 #include <pwd.h>
 #include <erl_driver.h>
 #include <ei.h>
@@ -6,6 +7,9 @@
 #define CMD_GET_PWUID 1
 #define CMD_GET_PWNAM 2
 #define CMD_GET_PWALL 3
+#define CMD_GET_GRGID 4
+#define CMD_GET_GRNAM 5
+#define CMD_GET_GRALL 6
 
 typedef struct pwd_drv_t {
   ErlDrvPort    port;
@@ -18,13 +22,13 @@ start (ErlDrvPort port, char *cmd);
 static void
 stop (ErlDrvData drv);
 
-static int
+ErlDrvSSizeT
 control (ErlDrvData drv,
   unsigned int command,
   char *buf,
-  int len,
+  ErlDrvSizeT len,
   char **rbuf,
-  int rlen);
+  ErlDrvSizeT rlen);
 
 static int
 send_error (pwd_drv_t *drv,
@@ -55,4 +59,28 @@ fill_passwd (ErlDrvTermData *data, struct passwd *pwd,
 
 static size_t 
 passwd_term_count ();
+
+static int
+get_grgid (pwd_drv_t *drv,
+  char *command);
+
+static int
+get_grnam (pwd_drv_t *drv,
+  char *command);
+
+static int
+get_grall (pwd_drv_t *drv);
+
+static ErlDrvTermData *
+make_group (pwd_drv_t *drv,
+  struct group *grp,
+  size_t *count);
+
+static void
+fill_group (ErlDrvTermData *data, struct group *grp,
+             char **name,
+             char **passwd);
+
+static size_t
+group_term_count ();
 

@@ -78,13 +78,13 @@ stop (ErlDrvData p)
   driver_free (drv);
 }
 
-static int
+ErlDrvSSizeT
 control (ErlDrvData p,
          unsigned int command,
          char *buf,
-         int len,
+         ErlDrvSizeT len,
          char **rbuf,
-         int rlen)
+         ErlDrvSizeT rlen)
 {
   pwd_drv_t *drv = (pwd_drv_t *)p;
   if (len)
@@ -100,6 +100,15 @@ control (ErlDrvData p,
       break;
     case CMD_GET_PWALL:
       get_pwall (drv);
+      break;
+    case CMD_GET_GRGID:
+      get_grgid (drv, buf);
+      break;
+    case CMD_GET_GRNAM:
+      get_grnam (drv, buf);
+      break;
+    case CMD_GET_GRALL:
+      get_grall (drv);
       break;
     default:
       send_error (drv, "error", "unknown_command");
@@ -245,7 +254,7 @@ make_passwd (pwd_drv_t *drv, struct passwd *pwd, size_t *count)
   ErlDrvTermData *result = (ErlDrvTermData *)driver_alloc (sizeof (ErlDrvTermData) * *count);
   if (!result)
     {
-      fprintf (drv->log, "Couldn't allocate memory for result (size: %ld)\n", *count);
+      fprintf (drv->log, "Couldn't allocate memory for result (size: %ld)\n", (long int)*count);
       fflush (drv->log);
 
       *count = 0;
@@ -326,3 +335,198 @@ passwd_term_count ()
          2 + 2 + 2 +  // gid tuple
          2;         // total tuple
 }
+
+static int
+get_grgid (pwd_drv_t *drv, char *cmd)
+{
+  __gid_t uid = atoi (cmd);
+  struct group *grp = getgrgid (uid);
+  if (!grp)
+    {
+       fprintf (drv->log, "getgrgid returns NULL for %s\n", cmd);
+       fflush (drv->log);
+       
+       return send_error (drv, "error", "unknow_gid");
+    }
+  
+  size_t result_count = 0;
+  ErlDrvTermData *result = make_group (drv, grp, &result_count);
+  if (!result)
+    {
+       return send_error (drv, "error", "Couldn't allocate memory");
+    }
+
+  int r = driver_output_term (drv->port,
+                              result,
+                              result_count);
+
+  driver_free (result);
+  return r;
+}
+
+static int
+get_grnam (pwd_drv_t *drv, char *cmd)
+{
+  struct group *grp = getgrnam (cmd);
+  if (!grp)
+    {
+      fprintf (drv->log, "getgrnam returns NULL for %s\n", cmd);
+      fflush (drv->log);
+
+      return send_error (drv, "error", "unknown_name");
+    }
+
+  size_t result_count = 0;
+  ErlDrvTermData *result = make_group (drv, grp, &result_count);
+  if (!result)
+    {
+      return send_error (drv, "error", "Couldn't allocate memory");
+    }
+
+  int r = driver_output_term (drv->port,
+                              result,
+                              result_count);
+
+  driver_free (result);
+  return r;
+}
+
+static int
+get_grall (pwd_drv_t *drv)
+{
+  size_t grp_count = 0;
+  setgrent ();
+  while (getgrent ())
+    grp_count++;
+  endgrent ();
+
+  size_t term_count = group_term_count ();
+  size_t result_count = grp_count * term_count;
+  ErlDrvTermData *result = (ErlDrvTermData *) driver_alloc (sizeof (ErlDrvTermData) * (result_count + 3));
+  if (!result)
+    {
+      fprintf (drv->log, "Couldn't allocate memory for result\n");
+      fflush (drv->log);
+
+      return send_error (drv, "error", "Couldn't allocate memory for result");
+    }
+
+  char **names = (char **) driver_alloc (sizeof (char *) * grp_count);
+  char **pwds  = (char **) driver_alloc (sizeof (char *) * grp_count);
+
+  setgrent();
+
+  size_t result_idx = 0;
+  struct group *grp = getgrent();
+  while (grp)
+    {
+      fill_group (&result[result_idx * term_count], grp, &names[result_idx], &pwds[result_idx]);
+      result_idx++;
+
+      grp = getgrent();
+    }
+
+  endgrent();
+
+  result[result_count++] = ERL_DRV_NIL;
+  result[result_count++] = ERL_DRV_LIST;
+  result[result_count++] = grp_count + 1;
+
+  int r = driver_output_term (drv->port,
+                              result,
+                              result_count);
+
+  size_t i = 0;
+  for (; i < grp_count; ++i)
+    {
+      driver_free (pwds[i]);
+      driver_free (names[i]);
+    }
+
+  driver_free (pwds);
+  driver_free (names);
+  driver_free (result);
+  return r;
+}
+
+static ErlDrvTermData *
+make_group (pwd_drv_t *drv, struct group *grp, size_t *count)
+{
+   *count = group_term_count ();
+   ErlDrvTermData *result = (ErlDrvTermData *)driver_alloc (sizeof (ErlDrvTermData) * *count);
+   if (!result)
+     {
+       fprintf (drv->log, "Couldn't allocate memory for result (size: %ld)\n", (long int)*count);
+        fflush (drv->log);
+        
+        *count = 0;
+        return 0;
+     }
+
+   fill_group (result, grp, 0, 0);
+   return result;
+}
+
+static void
+fill_group (ErlDrvTermData *data, struct group *grp,
+             char **name,
+             char **passwd)
+{
+   char *gr_name = grp->gr_name;
+   char *gr_passwd = grp->gr_passwd;
+
+   size_t len_name = strlen (gr_name);
+   size_t len_passwd = strlen (gr_passwd);
+
+   if (name)
+     {
+       *name = (char *) driver_alloc (sizeof (char) * (len_name + 1));
+       memcpy (*name, gr_name, sizeof (char) * (len_name + 1));
+
+       gr_name = *name;
+     }
+
+   if (passwd)
+     {
+       *passwd = (char *) driver_alloc (sizeof (char *) * (len_passwd + 1));
+       memcpy (*passwd, gr_passwd, sizeof (char) * (len_passwd + 1));
+
+       gr_passwd = *passwd;
+     }
+
+   *data++ = ERL_DRV_ATOM;
+   *data++ = driver_mk_atom ("gr_name");
+   *data++ = ERL_DRV_STRING;
+   *data++ = (ErlDrvTermData) gr_name;
+   *data++ = len_name;
+   *data++ = ERL_DRV_TUPLE;
+   *data++ = 2;
+
+   *data++ = ERL_DRV_ATOM;
+   *data++ = driver_mk_atom ("gr_passwd");
+   *data++ = ERL_DRV_STRING;
+   *data++ = (ErlDrvTermData) gr_passwd;
+   *data++ = len_passwd;
+   *data++ = ERL_DRV_TUPLE;
+   *data++ = 2;
+
+   *data++ = ERL_DRV_ATOM;
+   *data++ = driver_mk_atom ("gr_gid");
+   *data++ = ERL_DRV_UINT;
+   *data++ = grp->gr_gid;
+   *data++ = ERL_DRV_TUPLE;
+   *data++ = 2;
+
+   *data++ = ERL_DRV_TUPLE;
+   *data++ = 3;
+}
+
+static size_t
+group_term_count ()
+{
+  return 2 + 3 + 2 + // groupname tuple
+         2 + 3 + 2 + // password tuple
+         2 + 2 + 2 + // gid tuple
+         2; // total tuple
+}
+
