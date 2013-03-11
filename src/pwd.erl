@@ -46,15 +46,19 @@
 getpwuid (UID) when is_integer (UID) ->
   gen_server:call (pwd, {getpwuid, UID}).
 
+getpwnam (Name) when is_binary (Name) ->
+  getpwnam (binary_to_list(Name));
 getpwnam (Name) when is_list (Name) ->
   gen_server:call (pwd, {getpwnam, Name}).
 
-getpwall () -> 
+getpwall () ->
   gen_server:call (pwd, {getpwall}).
 
 getgrgid (GID) when is_integer (GID) ->
   gen_server:call (pwd, {getgrgid, GID}).
 
+getgrnam (Name) when is_binary (Name) ->
+    getgrnam (binary_to_list(Name));
 getgrnam (Name) when is_list (Name) ->
   gen_server:call (pwd, {getgrnam, Name}).
 
@@ -64,7 +68,7 @@ getgrall () ->
 get_by_uid (UID) when is_integer (UID) ->
   getpwuid (UID).
 
-get_by_name (Name) when is_list (Name) ->
+get_by_name (Name) ->
   getpwnam (Name).
 
 get_all () ->
@@ -73,7 +77,7 @@ get_all () ->
 get_group_by_uid (GID) when is_integer (GID) ->
   getgrgid (GID).
 
-get_group_by_name (Name) when is_list (Name) ->
+get_group_by_name (Name) ->
   getgrnam (Name).
 
 get_group_all () ->
