@@ -16,7 +16,7 @@
 -export ([get_by_name/1]).
 -export ([get_all/0]).
 
--export ([get_group_by_uid/1]).
+-export ([get_group_by_gid/1]).
 -export ([get_group_by_name/1]).
 -export ([get_group_all/0]).
 
@@ -74,7 +74,7 @@ get_by_name (Name) ->
 get_all () ->
   getpwall ().
 
-get_group_by_uid (GID) when is_integer (GID) ->
+get_group_by_gid (GID) when is_integer (GID) ->
   getgrgid (GID).
 
 get_group_by_name (Name) ->

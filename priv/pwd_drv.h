@@ -76,10 +76,11 @@ make_group (pwd_drv_t *drv,
   struct group *grp,
   size_t *count);
 
-static void
+static size_t
 fill_group (ErlDrvTermData *data, struct group *grp,
              char **name,
-             char **passwd);
+             char **passwd,
+             char ***mems);
 
 static size_t
 group_term_count ();

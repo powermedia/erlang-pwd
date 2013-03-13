@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <assert.h>
+
 static ErlDrvEntry driver_entry__ = {
   NULL,                             /* init */
   start,                            /* startup (defined below) */
@@ -27,6 +29,8 @@ static ErlDrvEntry driver_entry__ = {
   NULL,                             /* process_exit */
   NULL                              /* stop_select */
 };
+
+static size_t group_mem_length (struct group * grp);
 
 DRIVER_INIT (pwd_driver)
 {
@@ -395,13 +399,17 @@ static int
 get_grall (pwd_drv_t *drv)
 {
   size_t grp_count = 0;
+  size_t result_count = 0;
+  struct group * grp = NULL;
   setgrent ();
-  while (getgrent ())
-    grp_count++;
+  while ((grp = getgrent ()))
+    {
+      grp_count++;
+      result_count += group_term_count( group_mem_length(grp) );
+    }
   endgrent ();
+  grp = NULL;
 
-  size_t term_count = group_term_count ();
-  size_t result_count = grp_count * term_count;
   ErlDrvTermData *result = (ErlDrvTermData *) driver_alloc (sizeof (ErlDrvTermData) * (result_count + 3));
   if (!result)
     {
@@ -413,14 +421,17 @@ get_grall (pwd_drv_t *drv)
 
   char **names = (char **) driver_alloc (sizeof (char *) * grp_count);
   char **pwds  = (char **) driver_alloc (sizeof (char *) * grp_count);
+  char ***mems = (char ***) driver_alloc (sizeof (char**) * grp_count);
 
   setgrent();
 
   size_t result_idx = 0;
-  struct group *grp = getgrent();
+  ErlDrvTermData *result_it = result;
+  size_t off = 0;
+  grp = getgrent();
   while (grp)
     {
-      fill_group (&result[result_idx * term_count], grp, &names[result_idx], &pwds[result_idx]);
+      result_it += fill_group (result_it, grp, &names[result_idx], &pwds[result_idx], &mems[result_idx]);
       result_idx++;
 
       grp = getgrent();
@@ -428,23 +439,32 @@ get_grall (pwd_drv_t *drv)
 
   endgrent();
 
-  result[result_count++] = ERL_DRV_NIL;
-  result[result_count++] = ERL_DRV_LIST;
-  result[result_count++] = grp_count + 1;
+  *result_it++ = ERL_DRV_NIL;
+  *result_it++ = ERL_DRV_LIST;
+  *result_it++ = grp_count + 1;
 
   int r = driver_output_term (drv->port,
                               result,
-                              result_count);
+                              result_count + 3);
 
-  size_t i = 0;
-  for (; i < grp_count; ++i)
+  size_t i;
+  for (i = 0; i < grp_count; ++i)
     {
       driver_free (pwds[i]);
       driver_free (names[i]);
+
+      char ** mem_it = mems[i];
+      while (*mem_it)
+        {
+          driver_free (*mem_it);
+          mem_it++;
+        }
     }
 
   driver_free (pwds);
   driver_free (names);
+  driver_free (mems);
+
   driver_free (result);
   return r;
 }
@@ -452,32 +472,41 @@ get_grall (pwd_drv_t *drv)
 static ErlDrvTermData *
 make_group (pwd_drv_t *drv, struct group *grp, size_t *count)
 {
-   *count = group_term_count ();
+  size_t gr_mem_len = group_mem_length (grp);
+
+   *count = group_term_count ( gr_mem_len );
    ErlDrvTermData *result = (ErlDrvTermData *)driver_alloc (sizeof (ErlDrvTermData) * *count);
    if (!result)
      {
        fprintf (drv->log, "Couldn't allocate memory for result (size: %ld)\n", (long int)*count);
-        fflush (drv->log);
+       fflush (drv->log);
         
-        *count = 0;
-        return 0;
+       *count = 0;
+       return 0;
      }
 
-   fill_group (result, grp, 0, 0);
+   fill_group (result, grp, 0, 0, 0);
    return result;
 }
 
-static void
+static size_t
 fill_group (ErlDrvTermData *data, struct group *grp,
              char **name,
-             char **passwd)
+             char **passwd,
+             char ***mems )
 {
+   ErlDrvTermData *orig_data = data;
+
    char *gr_name = grp->gr_name;
    char *gr_passwd = grp->gr_passwd;
-
+   char **gr_mem = grp->gr_mem;
+  
    size_t len_name = strlen (gr_name);
    size_t len_passwd = strlen (gr_passwd);
+   size_t len_mem = group_mem_length(grp);
 
+   unsigned int it;
+   
    if (name)
      {
        *name = (char *) driver_alloc (sizeof (char) * (len_name + 1));
@@ -492,6 +521,21 @@ fill_group (ErlDrvTermData *data, struct group *grp,
        memcpy (*passwd, gr_passwd, sizeof (char) * (len_passwd + 1));
 
        gr_passwd = *passwd;
+     }
+
+   if (mems)
+     {
+       *mems = (char **) driver_alloc (sizeof (char **) * (len_mem + 1));
+
+       for ( it = 0; it < len_mem; it++ )
+         {
+           size_t len_mem_name = strlen(gr_mem[it]);
+           (*mems)[it] = (char *) driver_alloc (sizeof(char *) * (len_mem_name + 1));
+           memcpy ( (*mems)[it], gr_mem[it], sizeof (char) * (len_mem_name + 1));
+         }
+       gr_mem = *mems;
+
+       (*mems)[it] = NULL;
      }
 
    *data++ = ERL_DRV_ATOM;
@@ -517,16 +561,46 @@ fill_group (ErlDrvTermData *data, struct group *grp,
    *data++ = ERL_DRV_TUPLE;
    *data++ = 2;
 
+   *data++ = ERL_DRV_ATOM;
+   *data++ = driver_mk_atom ("gr_mem");
+
+   for ( it = 0; it < len_mem; it++ )
+     {
+       *data++ = ERL_DRV_STRING;
+       *data++ = (ErlDrvTermData) gr_mem[it];
+       *data++ = strlen(gr_mem[it]);
+     }
+
+   *data++ = ERL_DRV_NIL;
+   *data++ = ERL_DRV_LIST;
+   *data++ = len_mem + 1;
+
    *data++ = ERL_DRV_TUPLE;
-   *data++ = 3;
+   *data++ = 2;
+
+   *data++ = ERL_DRV_TUPLE;
+   *data++ = 4;
+
+   return data - orig_data;
 }
 
 static size_t
-group_term_count ()
+group_mem_length ( struct group * grp )
+{
+  size_t len_mem = 0;
+  char **it = grp->gr_mem;
+  while (*(it++)) len_mem++;
+  return len_mem;
+}
+  
+
+static size_t
+group_term_count ( size_t gr_mem_len )
 {
   return 2 + 3 + 2 + // groupname tuple
          2 + 3 + 2 + // password tuple
          2 + 2 + 2 + // gid tuple
+         (2 + 3*gr_mem_len + 1 + 2 + 2) + // member list: atom, list of strings, nil, list term, tuple term
          2; // total tuple
 }
 
