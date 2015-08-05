@@ -3,3 +3,5 @@ config.log
 config.status
 Makefile
 priv/Makefile
+_build
+rebar.lock
