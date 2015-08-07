@@ -2,14 +2,14 @@
 all: compile
 
 compile:
-	test -d ebin || mkdir ebin
-	cd priv && make
+	test -d priv || mkdir priv
+	cd c_src && make
 
 debug:
-	cd priv && make debug
+	cd c_src && make debug
 
 clean:
-	rm -rf ./ebin/*.so
+	rm -rf ./c_src/*.so
 
 docs:
 	@ERL@ -noshell -run edoc_run application "'pwd'" '"."' '[{title, "Erlang binding for Posix User Database Access"}, {hidden, false}, {private, false}]' -s erlang halt

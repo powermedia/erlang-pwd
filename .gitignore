@@ -3,5 +3,6 @@ config.log
 config.status
 Makefile
 priv/Makefile
+priv/pwd_drv.so
 _build
 rebar.lock

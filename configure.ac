@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.63])
 AC_INIT([erlang-pwd], [VERSION], [BUG-REPORT-ADDRESS])
-AC_CONFIG_SRCDIR([priv/pwd_drv.h])
+AC_CONFIG_SRCDIR([c_src/pwd_drv.h])
 #AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
@@ -31,5 +31,5 @@ AC_ERLANG_SUBST_LIB_DIR
 AC_ERLANG_CHECK_LIB(erl_interface)
 
 AC_CONFIG_FILES([Makefile
-                 priv/Makefile])
+                 c_src/Makefile])
 AC_OUTPUT
