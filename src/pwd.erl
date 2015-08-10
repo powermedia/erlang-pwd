@@ -93,14 +93,14 @@ get_group_all () ->
 start_link () ->
   gen_server:start_link ({local, pwd}, ?MODULE, [], []).
 
--type(init_return() :: {'ok', tuple()} | {'ok', tuple(), integer()} | 'ignore' | {'stop', any()}).
+-type(init_return() :: {'ok', #state{}} | 'ignore' | {'stop', any()}).
 -spec(init/1::([]) -> init_return()).
 init ([]) ->
   process_flag (trap_exit, true),
-  SearchDir = filename:join ([filename:dirname (code:which (?MODULE)), "..", "ebin"]),
-  case erl_ddll:load (SearchDir, "pwd_drv")
+  PrivDir = code:lib_dir(pwd, priv),
+  case erl_ddll:load (PrivDir, "pwd_drv")
   of
-    ok -> 
+    ok ->
       Port = open_port ({spawn, "pwd_drv"}, [binary]),
       {ok, #state {port = Port}};
     {error, Error} ->
@@ -141,8 +141,8 @@ handle_info (_Info, State) ->
 %% --------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> void()
 %% @doc This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any 
-%% necessary cleaning up. When it returns, the gen_server terminates 
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_server terminates
 %% with Reason.
 %%
 %% The return value is ignored.
@@ -192,7 +192,7 @@ control_drv (Port, Command) when is_port (Port) and is_integer (Command) ->
   port_control (Port, Command, <<>>),
   wait_result (Port).
 
-control_drv (Port, Command, Data) 
+control_drv (Port, Command, Data)
   when is_port (Port) and is_integer (Command) and is_binary (Data) ->
     port_control (Port, Command, Data),
     wait_result (Port).
@@ -202,4 +202,3 @@ wait_result (_Port) ->
   receive
 	  Smth -> Smth
   end.
-
