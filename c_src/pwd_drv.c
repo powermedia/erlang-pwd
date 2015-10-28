@@ -27,7 +27,8 @@ static ErlDrvEntry driver_entry__ = {
   ERL_DRV_FLAG_USE_PORT_LOCKING,    /* ERL_DRV_FLAGs */
   NULL,                             /* handle2 */
   NULL,                             /* process_exit */
-  NULL                              /* stop_select */
+  NULL,                             /* stop_select */
+  NULL                              /* emergency_close */
 };
 
 static size_t group_mem_length (struct group * grp);
@@ -133,9 +134,9 @@ send_error (pwd_drv_t *drv,
       ERL_DRV_TUPLE, 2
   };
 
-  return driver_output_term (drv->port,
-                             spec,
-                             sizeof (spec) / sizeof (spec[0]));
+  return erl_drv_output_term (driver_mk_port(drv->port),
+                              spec,
+                              sizeof (spec) / sizeof (spec[0]));
 }
 
 static int
@@ -158,9 +159,9 @@ get_pwuid (pwd_drv_t *drv, char *cmd)
       return send_error (drv, "error", "Couldn't allocate memory");
     }
 
-  int r = driver_output_term (drv->port,
-                              result,
-                              result_count);
+  int r = erl_drv_output_term (driver_mk_port(drv->port),
+                               result,
+                               result_count);
 
   driver_free (result);
   return r;
@@ -185,9 +186,9 @@ get_pwnam (pwd_drv_t *drv, char *cmd)
       return send_error (drv, "error", "Couldn't allocate memory");
     }
 
-  int r = driver_output_term (drv->port,
-                              result, 
-                              result_count);
+  int r = erl_drv_output_term (driver_mk_port(drv->port),
+                               result, 
+                               result_count);
 
   driver_free (result);
   return r;
@@ -234,9 +235,9 @@ get_pwall (pwd_drv_t *drv)
   result[result_count++] = ERL_DRV_LIST;
   result[result_count++] = pwd_count + 1;
 
-  int r = driver_output_term (drv->port,
-                              result,
-                              result_count);
+  int r = erl_drv_output_term (driver_mk_port(drv->port),
+                               result,
+                               result_count);
 
   size_t i = 0;
   for (; i < pwd_count; ++i)
@@ -360,9 +361,9 @@ get_grgid (pwd_drv_t *drv, char *cmd)
        return send_error (drv, "error", "Couldn't allocate memory");
     }
 
-  int r = driver_output_term (drv->port,
-                              result,
-                              result_count);
+  int r = erl_drv_output_term (driver_mk_port(drv->port),
+                               result,
+                               result_count);
 
   driver_free (result);
   return r;
@@ -387,9 +388,9 @@ get_grnam (pwd_drv_t *drv, char *cmd)
       return send_error (drv, "error", "Couldn't allocate memory");
     }
 
-  int r = driver_output_term (drv->port,
-                              result,
-                              result_count);
+  int r = erl_drv_output_term (driver_mk_port(drv->port),
+                               result,
+                               result_count);
 
   driver_free (result);
   return r;
@@ -427,7 +428,6 @@ get_grall (pwd_drv_t *drv)
 
   size_t result_idx = 0;
   ErlDrvTermData *result_it = result;
-  size_t off = 0;
   grp = getgrent();
   while (grp)
     {
@@ -443,9 +443,9 @@ get_grall (pwd_drv_t *drv)
   *result_it++ = ERL_DRV_LIST;
   *result_it++ = grp_count + 1;
 
-  int r = driver_output_term (drv->port,
-                              result,
-                              result_count + 3);
+  int r = erl_drv_output_term (driver_mk_port(drv->port),
+                               result,
+                               result_count + 3);
 
   size_t i;
   for (i = 0; i < grp_count; ++i)
