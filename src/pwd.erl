@@ -198,7 +198,7 @@ control_drv (Port, Command, Data)
     wait_result (Port).
 
 
-wait_result (_Port) ->
+wait_result (Port) ->
   receive
-	  Smth -> Smth
+      {pwd, Port, Smth} -> Smth
   end.
